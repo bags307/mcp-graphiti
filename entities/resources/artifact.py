@@ -30,6 +30,6 @@ class Artifact(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    name: str = Field(..., description="Name of the artifact.")
+    artifact_name: str = Field(..., description="Name of the artifact.")
     type: str = Field(..., description="Type or category of the artifact.")
     location: str = Field(..., description="Location or reference to the artifact.") 

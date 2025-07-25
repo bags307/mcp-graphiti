@@ -16,5 +16,5 @@ class InteractionModel(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    name: str = Field(..., description="Name of interaction pattern or model.")
+    model_name: str = Field(..., description="Name of interaction pattern or model.")
     description: str = Field(..., description="How interactions typically occur.") 

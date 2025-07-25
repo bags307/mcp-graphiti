@@ -18,7 +18,7 @@ class Agent(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     id: str = Field(..., description="Unique identifier for the agent.")
-    name: str = Field(..., description="Human-readable name of the agent.")
+    agent_name: str = Field(..., description="Human-readable name of the agent.")
     role: str = Field(..., description="Role or function of the agent within the system.")
     metadata: BaseMetadata = Field(default_factory=BaseMetadata, description="Optional structured metadata for extensibility.")
     tools: list[str] = Field(default_factory=list, description="List of tools or capabilities the agent has.")

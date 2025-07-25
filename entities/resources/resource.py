@@ -16,7 +16,7 @@ class Resource(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     id: str = Field(..., description="Resource ID (unique readable identifier).")
-    name: str = Field(..., description="Resource name.")
+    resource_name: str = Field(..., description="Resource name.")
     description: str = Field(..., description="Description of the resource.") 
     type: str = Field(..., description="Type of the resource (reference, guide, article, etc.)")
     location: str = Field(..., description="Location of the resource (URL, file path, etc.)")

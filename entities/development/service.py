@@ -19,7 +19,7 @@ class Service(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    name: str = Field(..., description="Service name (e.g., 'auth-service', 'user-api')")
+    service_name: str = Field(..., description="Service name (e.g., 'auth-service', 'user-api')")
     service_type: str = Field(..., description="Type: backend|frontend|api|worker|database|cache")
     responsibility: str = Field(..., description="What this service does")
     tech_stack: Optional[List[str]] = Field(None, description="Technologies used (e.g., ['Node.js', 'Express', 'PostgreSQL'])")

@@ -21,7 +21,7 @@ class Project(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     project_id: str = Field(..., description="Unique identifier for the project.")
-    name: str = Field(..., description="Name of the project.")
+    project_name: str = Field(..., description="Name of the project.")
     description: str = Field(..., description="Description of the project.")
     goals: list[str] = Field(default_factory=list, description="List of goals or objectives associated with the project.")
     resources: list[str] = Field(default_factory=list, description="List of resources associated with the project.")

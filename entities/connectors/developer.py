@@ -16,7 +16,7 @@ class Developer(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     developer_id: str = Field(..., description="Unique identifier for the developer.")
-    name: str = Field(..., description="Name of the developer.")
+    developer_name: str = Field(..., description="Name of the developer.")
     expertise: list[str] = Field(default_factory=list, description="Areas of expertise.")
     working_style: str = Field(..., description="Developer's work patterns and habits.")
     projects: list[str] = Field(default_factory=list, description="List of projects the developer is involved in.")

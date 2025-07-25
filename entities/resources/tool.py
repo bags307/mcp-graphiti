@@ -34,7 +34,7 @@ class Tool(BaseModel):
 
     id: str = Field(..., description="Unique, machine-friendly identifier for the tool (e.g., 'filesystem_mcp', 'github_search'). Serves as the primary key.")
     label: str = Field(..., description="A very short (2-3 words max) display label for the tool (e.g., 'FS Server', 'GH Search').")
-    name: str = Field(..., description="Human-readable name for the tool (e.g., 'Filesystem MCP Server', 'GitHub Repository Search').")
+    tool_name: str = Field(..., description="Human-readable name for the tool (e.g., 'Filesystem MCP Server', 'GitHub Repository Search').")
     purpose: str = Field(..., description="Overall purpose or high-level functionality of the tool.")
     provided_actions: Optional[List[str]] = Field(
         default=None,

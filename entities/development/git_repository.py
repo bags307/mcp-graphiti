@@ -19,7 +19,7 @@ class GitRepository(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    name: str = Field(..., description="Repository name (e.g., 'mcp-graphiti')")
+    repo_name: str = Field(..., description="Repository name (e.g., 'mcp-graphiti')")
     url: Optional[str] = Field(None, description="Repository URL (e.g., 'https://github.com/org/repo')")
     owner: Optional[str] = Field(None, description="Owner or organization name")
     primary_language: Optional[str] = Field(None, description="Main programming language")

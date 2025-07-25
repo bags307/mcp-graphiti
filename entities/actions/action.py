@@ -1,7 +1,7 @@
 """Action entity type for Graphiti Meta KG."""
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class Action(BaseModel):
     """
@@ -18,7 +18,7 @@ class Action(BaseModel):
     1.  Identify distinct performable actions mentioned (e.g., specific tool functions/commands, verbs describing process steps).
     2.  Determine the unique, machine-friendly `id` for the action (e.g., 'read_file', 'search_nodes', 'validate_user_credentials'). Use a consistent naming convention (e.g., snake_case).
     3.  Define a short `label` (2-3 words max) suitable for display (e.g., "Read File", "Search Nodes", "Validate Creds").
-    4.  Provide a clear, human-readable `name` for the action (e.g., 'Read File Contents', 'Search Knowledge Graph Nodes', 'Validate User Credentials').
+    4.  Provide a clear, human-readable `action_name` for the action (e.g., 'Read File Contents', 'Search Knowledge Graph Nodes', 'Validate User Credentials').
     5.  Write a detailed `description` of what the action does and its intended outcome.
     6.  If the action takes parameters, describe the expected input structure in `parameter_schema`. This could be a JSON schema (as a dict or string) or a textual description.
     7.  List any `preconditions` necessary for the action to be performed (e.g., 'User must be authenticated', 'Input file must exist').
@@ -28,8 +28,10 @@ class Action(BaseModel):
     11. If information for optional fields (`parameter_schema`, `preconditions`, `side_effects`, `boundary`) is not present, leave them as None.
 
     ## Output Format
-    An Action entity with `id`, `label`, `name`, `description`, and other available attributes populated based on the information identified.
+    An Action entity with `id`, `label`, `action_name`, `description`, and other available attributes populated based on the information identified.
     """
+
+    model_config = ConfigDict(extra='forbid')
 
     id: str = Field(
         ...,
@@ -41,7 +43,7 @@ class Action(BaseModel):
         description="A very short (2-3 words max) display label for the action (e.g., 'Read File', 'Search Nodes')."
     )
 
-    name: str = Field(
+    action_name: str = Field(
         ...,
         description="Human-readable name for the action (e.g., 'Read File Contents', 'Search Knowledge Graph Nodes')."
     )
