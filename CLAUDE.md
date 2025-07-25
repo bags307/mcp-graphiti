@@ -256,6 +256,16 @@ The server includes special handling for Cerebras through OpenRouter:
 - Extends `OpenAIGenericClient` for better schema injection support
 - Provider routing via `extra_body` parameter per OpenRouter API specification
 
+## Custom Graphiti Fork
+
+We maintain a fork of Graphiti at https://github.com/remodlai/graphiti for custom modifications and fixes. The fork is automatically used via the git dependency in `pyproject.toml`.
+
+### JSON Episode Handling
+**Important**: Graphiti expects all episode content to be strings, even for JSON episodes. The MCP server automatically handles conversion:
+- Dict/list inputs are auto-stringified
+- Format is auto-detected (dict/list → json, string starting with '{' → json)
+- The stringified content is passed to Graphiti's `add_episode` method
+
 ## Troubleshooting
 
 ### Common Issues
@@ -263,6 +273,7 @@ The server includes special handling for Cerebras through OpenRouter:
 - **Entity loading failures**: Verify Python syntax and Pydantic model structure
 - **Neo4j connection issues**: Confirm credentials and service startup order
 - **Permission errors**: Ensure proper file ownership for mounted volumes
+- **JSON episode failures**: Ensure JSON content is valid and remember that Graphiti stores all content as strings
 
 ### Health Checks
 ```bash

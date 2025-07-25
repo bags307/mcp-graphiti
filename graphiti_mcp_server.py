@@ -561,9 +561,10 @@ async def process_episode_queue(group_id: str):
         logger.info(f'Stopped episode queue worker for group_id: {group_id}')
 
 
-async def add_episode_impl(
+@mcp.tool()
+async def add_episode(
     name: str,
-    episode_body: Union[str, dict, list],
+    episode_body: Any,  # Accept Any to handle both strings and dicts from MCP client
     group_id: Optional[str] = None,
     format: str = 'text',
     source_description: str = '',
@@ -595,18 +596,18 @@ async def add_episode_impl(
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Auto-stringify JSON objects and auto-detect format
+        # Handle different input types and auto-detect format
         if isinstance(episode_body, (dict, list)):
-            # Convert dict/list to JSON string
+            # Already a dict/list - convert to JSON string
             episode_body_str = json.dumps(episode_body)
             format = 'json'  # Auto-set format to json
-            logger.debug(f"Auto-stringified dict/list episode_body and set format to 'json'")
+            logger.debug(f"Received dict/list episode_body, converted to JSON string and set format to 'json'")
         elif isinstance(episode_body, str) and episode_body.strip().startswith('{'):
             # String that looks like JSON
             episode_body_str = episode_body
             if format == 'text':  # Only auto-set if not explicitly specified
                 format = 'json'
-                logger.debug(f"Auto-detected JSON format from string starting with '{'")
+                logger.debug("Auto-detected JSON format from string starting with '{'")
         else:
             # Regular string
             episode_body_str = episode_body
@@ -634,24 +635,18 @@ async def add_episode_impl(
         async def process_episode():
             # ---> Logging <---
             logger.info(f"[BG Task - {group_id_str}] Starting processing for episode '{name}' (format: {format})")
-            processed_body: Union[str, Dict, List] = episode_body_str # Default to string
+            
+            # Validate JSON format if specified
+            if source_type == EpisodeType.json:
+                # Validate that the string is valid JSON
+                try:
+                    json.loads(episode_body_str)
+                    logger.debug(f"[BG Task - {group_id_str}] Validated JSON format for episode '{name}'")
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"[BG Task - {group_id_str}] Invalid JSON in episode_body for episode '{name}': {json_err}")
+                    raise ValueError(f"Invalid JSON provided for format='json': {json_err}") from json_err
             
             try:
-                # Attempt JSON parsing ONLY if format is json, INSIDE the background task
-                if source_type == EpisodeType.json:
-                    try:
-                        logger.debug(f"[BG Task - {group_id_str}] Attempting to parse episode_body as JSON")
-                        processed_body = json.loads(episode_body_str)
-                        logger.debug(f"[BG Task - {group_id_str}] Successfully parsed JSON.")
-                        # NOTE: We pass the original string to client.add_episode,
-                        # as the core library currently expects a string even for JSON source.
-                        # If the core library is updated to accept dict/list, change `episode_body=episode_body_str` below.
-                    except json.JSONDecodeError as json_err:
-                        logger.error(f"[BG Task - {group_id_str}] Invalid JSON in episode_body for episode '{name}': {json_err}. Processing as text.")
-                        # Fallback: Process as text if JSON parsing fails? Or raise error?
-                        # For now, let's proceed but log the error. The core library might handle it gracefully or fail.
-                        # Alternatively, uncomment the next line to stop processing on bad JSON:
-                        # raise ValueError(f"Invalid JSON provided for format='json': {json_err}") from json_err
                 
                 # --- MODIFIED: Always use all currently loaded/registered entities ---
                 # The decision of which entities are available is made at server startup
@@ -662,8 +657,8 @@ async def add_episode_impl(
                 # --- End Modification ---
 
                 # Call the core library function
-                # IMPORTANT: Pass episode_body_str for now, even if format='json',
-                # as graphiti-core expects a string.
+                # Always pass the string version - Graphiti expects strings for all episode types
+                
                 await client.add_episode(
                     name=name,
                     episode_body=episode_body_str,
@@ -724,72 +719,8 @@ async def add_episode_impl(
         return {'error': f'Error queuing episode task: {error_msg}'}
 
 
-@mcp.tool()
-async def add_episode(
-    name: str,
-    episode_body: str,
-    group_id: Optional[str] = None,
-    format: str = 'text',
-    source_description: str = '',
-    uuid: Optional[str] = None,
-    entity_subset: Optional[list[str]] = None,
-) -> Union[SuccessResponse, ErrorResponse]:
-    """Add an episode to the Graphiti knowledge graph.
-
-    Processes the episode addition asynchronously in the background.
-    Episodes for the same group_id are processed sequentially.
-
-    Args:
-        name (str): Name of the episode
-        episode_body (str): Episode content as string. JSON strings are auto-detected.
-        group_id (str, optional): A unique ID for this graph. Defaults to config.
-        format (str, optional): How to interpret the episode_body ('text', 'json', 'message'). 
-        source_description (str, optional): Description of the source.
-        uuid (str, optional): Optional UUID for the episode.
-        entity_subset (list[str], optional): Optional list of entity names to use.
-    """
-    return await add_episode_impl(
-        name=name,
-        episode_body=episode_body,
-        group_id=group_id,
-        format=format,
-        source_description=source_description,
-        uuid=uuid,
-        entity_subset=entity_subset
-    )
 
 
-@mcp.tool()
-async def add_episode_json(
-    name: str,
-    episode_data: dict,
-    group_id: Optional[str] = None,
-    source_description: str = '',
-    uuid: Optional[str] = None,
-    entity_subset: Optional[list[str]] = None,
-) -> Union[SuccessResponse, ErrorResponse]:
-    """Add an episode with JSON data to the Graphiti knowledge graph.
-
-    Alternative tool for adding episodes when you have structured JSON data.
-    Automatically sets format to 'json' and stringifies the data.
-
-    Args:
-        name (str): Name of the episode
-        episode_data (dict): Episode content as JSON object
-        group_id (str, optional): A unique ID for this graph. Defaults to config.
-        source_description (str, optional): Description of the source.
-        uuid (str, optional): Optional UUID for the episode.
-        entity_subset (list[str], optional): Optional list of entity names to use.
-    """
-    return await add_episode_impl(
-        name=name,
-        episode_body=episode_data,
-        group_id=group_id,
-        format='json',
-        source_description=source_description,
-        uuid=uuid,
-        entity_subset=entity_subset
-    )
 
 
 @mcp.tool()
