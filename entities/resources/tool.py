@@ -40,3 +40,8 @@ class Tool(BaseModel):
         default=None,
         description="List of IDs of the specific Action entities this tool provides or enables."
     )
+
+    @property
+    def name(self) -> str:
+        """Return the tool name for embedding purposes."""
+        return self.tool_name

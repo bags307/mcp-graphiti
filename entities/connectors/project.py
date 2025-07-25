@@ -30,4 +30,9 @@ class Project(BaseModel):
     start_date: str = Field(..., description="Start date of the project.")
     end_date: str = Field(..., description="End date of the project.")
     team: list[str] = Field(default_factory=list, description="List of team members associated with the project.")
+
+    @property
+    def name(self) -> str:
+        """Return the project name for embedding purposes."""
+        return self.project_name
     

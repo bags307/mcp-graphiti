@@ -32,4 +32,9 @@ class Artifact(BaseModel):
 
     artifact_name: str = Field(..., description="Name of the artifact.")
     type: str = Field(..., description="Type or category of the artifact.")
-    location: str = Field(..., description="Location or reference to the artifact.") 
+    location: str = Field(..., description="Location or reference to the artifact.")
+
+    @property
+    def name(self) -> str:
+        """Return the artifact name for embedding purposes."""
+        return self.artifact_name 

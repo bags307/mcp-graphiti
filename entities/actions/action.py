@@ -73,4 +73,9 @@ class Action(BaseModel):
         description="A list of boundary conditions defining the scope or context where the action is applicable/valid."
     )
 
+    @property
+    def name(self) -> str:
+        """Return the action name for embedding purposes."""
+        return self.action_name
+
 # Auto-registration assumed

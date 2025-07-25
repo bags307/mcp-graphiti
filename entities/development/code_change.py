@@ -23,7 +23,7 @@ class CodeChange(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     author: str = Field(..., description="Person who made the change (name or role)")
-    summary: str = Field(..., description="Brief summary of the change")
+    change_summary: str = Field(..., description="Brief summary of the change")
     change_type: str = Field(..., description="Type: feature|fix|refactor|performance|security|docs|test|config")
     files_changed: List[str] = Field(..., description="List of files that were modified")
     description: str = Field(..., description="Detailed description of what changed and why")
@@ -32,3 +32,8 @@ class CodeChange(BaseModel):
     pull_request_id: Optional[str] = Field(None, description="PR/MR number or identifier")
     fixes_issue: Optional[str] = Field(None, description="Bug or issue this change fixes")
     implements_feature: Optional[str] = Field(None, description="Feature this change implements")
+
+    @property
+    def summary(self) -> str:
+        """Return the change summary for Graphiti system compatibility."""
+        return self.change_summary

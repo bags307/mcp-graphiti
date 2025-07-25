@@ -17,4 +17,9 @@ class InteractionModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     model_name: str = Field(..., description="Name of interaction pattern or model.")
-    description: str = Field(..., description="How interactions typically occur.") 
+    description: str = Field(..., description="How interactions typically occur.")
+
+    @property
+    def name(self) -> str:
+        """Return the model name for embedding purposes."""
+        return self.model_name 

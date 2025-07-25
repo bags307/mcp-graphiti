@@ -26,3 +26,8 @@ class Agent(BaseModel):
     limitations: list[str] = Field(default_factory=list, description="List of limitations or constraints the agent has.")
     preferences: list[str] = Field(default_factory=list, description="List of preferences or preferences the agent has.")
     mandates: list[str] = Field(default_factory=list, description="List of mandates or goals the agent has.")
+
+    @property
+    def name(self) -> str:
+        """Return the agent name for embedding purposes."""
+        return self.agent_name

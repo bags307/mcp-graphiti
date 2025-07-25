@@ -99,3 +99,8 @@ class APIEndpoint(BaseModel):
     openapi_spec: Optional[str] = Field(None, description="OpenAPI/Swagger specification reference")
     tags: Optional[List[str]] = Field(None, description="Tags for categorization (e.g., ['user-management', 'public-api', 'critical'])")
     notes: Optional[str] = Field(None, description="Additional notes, quirks, or important implementation details")
+
+    @property
+    def name(self) -> str:
+        """Return the endpoint name for embedding purposes."""
+        return self.endpoint_name

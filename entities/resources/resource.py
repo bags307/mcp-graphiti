@@ -22,4 +22,9 @@ class Resource(BaseModel):
     location: str = Field(..., description="Location of the resource (URL, file path, etc.)")
     author: str = Field(..., description="Author of the resource.")
     related_resources: list[str] = Field(default_factory=list, description="List of related resources")
+
+    @property
+    def name(self) -> str:
+        """Return the resource name for embedding purposes."""
+        return self.resource_name
     

@@ -25,3 +25,8 @@ class Service(BaseModel):
     tech_stack: Optional[List[str]] = Field(None, description="Technologies used (e.g., ['Node.js', 'Express', 'PostgreSQL'])")
     depends_on: Optional[List[str]] = Field(None, description="Other services this depends on")
     repository: Optional[str] = Field(None, description="Git repository containing this service")
+
+    @property
+    def name(self) -> str:
+        """Return the service name for embedding purposes."""
+        return self.service_name

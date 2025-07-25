@@ -24,3 +24,8 @@ class GitRepository(BaseModel):
     owner: Optional[str] = Field(None, description="Owner or organization name")
     primary_language: Optional[str] = Field(None, description="Main programming language")
     description: Optional[str] = Field(None, description="Repository purpose or description")
+
+    @property
+    def name(self) -> str:
+        """Return the repo name for embedding purposes."""
+        return self.repo_name
