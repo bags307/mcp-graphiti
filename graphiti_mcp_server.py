@@ -445,6 +445,13 @@ def handle_json_input(func):
     return wrapper
 
 
+# TEMPORARY WORKAROUND: Default factory for group_ids
+# This ensures we always have a fresh ["global"] list to avoid mutable default issues
+def get_default_group_ids() -> list[str]:
+    """Returns a fresh ["global"] list to avoid mutable default issues."""
+    return ["global"]
+
+
 # Initialize Graphiti client
 graphiti_client: Optional[Graphiti] = None
 
@@ -738,7 +745,7 @@ async def add_episode(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: list[str] = ["global"],
+    group_ids: Optional[list[str]] = None,  # Default to ["global"] handled in function body
     max_nodes: int = 10,
     center_node_uuid: Optional[str] = None,
     entity: str = '',  # cursor seems to break with None
@@ -750,7 +757,7 @@ async def search_nodes(
 
     Args:
         query: The search query
-        group_ids: List of group IDs to filter results (default: ["global"])
+        group_ids: Optional list of group IDs to filter results (defaults to ["global"] if not provided)
         max_nodes: Maximum number of nodes to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
         entity: Optional single entity to filter results (permitted: "Preference", "Procedure")
@@ -761,7 +768,13 @@ async def search_nodes(
         return ErrorResponse(error='Graphiti client not initialized')
 
     try:
-        # Use the provided group_ids (defaults to ["global"])
+        # TEMPORARY PATCH: Ensure group_ids always has a valid value
+        # Default to ["global"] if None or empty list
+        # This is a workaround for Pydantic/MCP parameter handling issues
+        # Will be replaced when LexIQ integration is complete
+        if group_ids is None or not group_ids:  # Covers None, [], and empty cases
+            group_ids = ["global"]
+        
         effective_group_ids = group_ids
 
         # Configure the search
@@ -817,7 +830,7 @@ async def search_nodes(
 @mcp.tool()
 async def search_facts(
     query: str,
-    group_ids: list[str] = ["global"],
+    group_ids: Optional[list[str]] = None,  # Default to ["global"] handled in function body
     max_facts: int = 10,
     center_node_uuid: Optional[str] = None,
 ) -> Union[FactSearchResponse, ErrorResponse]:
@@ -825,7 +838,7 @@ async def search_facts(
 
     Args:
         query: The search query
-        group_ids: List of group IDs to filter results (default: ["global"])
+        group_ids: Optional list of group IDs to filter results (defaults to ["global"] if not provided)
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
@@ -835,7 +848,13 @@ async def search_facts(
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Use the provided group_ids (defaults to ["global"])
+        # TEMPORARY PATCH: Ensure group_ids always has a valid value
+        # Default to ["global"] if None or empty list
+        # This is a workaround for Pydantic/MCP parameter handling issues
+        # Will be replaced when LexIQ integration is complete
+        if group_ids is None or not group_ids:  # Covers None, [], and empty cases
+            group_ids = ["global"]
+        
         effective_group_ids = group_ids
 
         # We've already checked that graphiti_client is not None above
