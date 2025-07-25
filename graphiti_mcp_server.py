@@ -473,6 +473,7 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
 
     # Create separate embedder client if configured
     embedder = None
+    logger.info(f'Checking embedder configuration: embedder_api_key={"[SET]" if config.embedder_api_key else "[NOT SET]"}')
     if config.embedder_api_key:
         logger.info('Creating separate OpenAI embedder client')
         embedder_config = OpenAIEmbedderConfig(
@@ -484,6 +485,8 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
         
         embedder = OpenAIEmbedder(config=embedder_config)
         logger.info(f'Configured separate embedder: {config.embedder_model or "text-embedding-3-small"} at {config.embedder_base_url or "https://api.openai.com/v1"}')
+    else:
+        logger.warning('No embedder API key configured - search functions will not work!')
 
     graphiti_client = Graphiti(
         uri=config.neo4j_uri,
