@@ -1,39 +1,34 @@
 """CodeChange entity for Graphiti MCP Server."""
 
-from pydantic import BaseModel, Field
+from typing import List, Optional
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class CodeChange(BaseModel):
-    """
-    **AI Persona:** You are an expert entity extraction assistant.
-    
-    **Task:** Identify and extract information about Code Changes mentioned in the provided text context.
-    A CodeChange represents a modification, addition, or deletion in a codebase.
+    """Represents a modification to the codebase (commit, PR, or change).
 
-    **Context:** The user will provide text containing potential mentions of code modifications.
-
-    **Extraction Instructions:**
-    Your goal is to accurately populate the fields (`file_path`, `change_type`, `description`) 
-    based *only* on information explicitly or implicitly stated in the text.
-
-    1.  **Identify Core Mentions:** Look for descriptions of code modifications ("I added X", "I fixed Y", "I refactored Z").
-    2.  **Extract File Path:** Identify specific files, functions, or modules that were changed.
-    3.  **Extract Change Type:** Determine the type of change (fix, feature, refactor, optimization, etc.).
-    4.  **Extract Description:** Capture the purpose or reason for the change and what was modified.
-    5.  **Handle Ambiguity:** If information for a field is missing or unclear, indicate that.
-
-    **Output Format:** Respond with the extracted data structured according to this Pydantic model.
+    Instructions for identifying and extracting code changes:
+    1. Look for mentions of code modifications ("added", "changed", "fixed", "updated")
+    2. Identify commit messages, PR descriptions, or change narratives
+    3. Extract who made the change (name or role, NEVER generic "developer")
+    4. List all files that were modified
+    5. Capture what the change does (summary) and why (description)
+    6. Note the type of change (feature, fix, refactor, etc.)
+    7. Extract the branch name if mentioned (e.g., "on main", "in feature branch")
+    8. Extract commit hash or PR number if mentioned
+    9. Note what bug or feature this relates to if mentioned
+    10. Only extract explicitly stated information
     """
 
-    file_path: str = Field(
-        ...,
-        description='The file path or component that was changed.',
-    )
-    change_type: str = Field(
-        ...,
-        description='Type of change (fix, feature, refactor, optimization, etc.).',
-    )
-    description: str = Field(
-        ...,
-        description='Description of what was changed and why. Only use information mentioned in the context.',
-    ) 
+    model_config = ConfigDict(extra='forbid')
+
+    author: str = Field(..., description="Person who made the change (name or role)")
+    summary: str = Field(..., description="Brief summary of the change")
+    change_type: str = Field(..., description="Type: feature|fix|refactor|performance|security|docs|test|config")
+    files_changed: List[str] = Field(..., description="List of files that were modified")
+    description: str = Field(..., description="Detailed description of what changed and why")
+    branch: Optional[str] = Field(None, description="Git branch where change was made (e.g., 'main', 'feature/add-auth')")
+    commit_hash: Optional[str] = Field(None, description="Git commit hash or identifier")
+    pull_request_id: Optional[str] = Field(None, description="PR/MR number or identifier")
+    fixes_issue: Optional[str] = Field(None, description="Bug or issue this change fixes")
+    implements_feature: Optional[str] = Field(None, description="Feature this change implements")

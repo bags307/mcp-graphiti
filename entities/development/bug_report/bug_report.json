@@ -1,0 +1,81 @@
+{
+  "name": "BugReport",
+  "description": "Represents a software defect, error, or issue that needs tracking and resolution",
+  "when_to_use": [
+    "When reporting errors, failures, or unexpected behavior",
+    "When documenting system malfunctions or defects",
+    "When tracking issues that need investigation or fixes"
+  ],
+  "schema": {
+    "type": "object",
+    "required": ["title", "reporter", "component", "severity", "description"],
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Brief descriptive title of the bug"
+      },
+      "reporter": {
+        "type": "string",
+        "description": "Person who reported (name or role, NEVER generic 'user')",
+        "examples": ["QA-Alice", "Frontend-Bob", "Customer-Support-Team"]
+      },
+      "component": {
+        "type": "string",
+        "description": "Affected component, service, or feature",
+        "examples": ["Authentication Service", "User Dashboard", "Payment API"]
+      },
+      "severity": {
+        "type": "string",
+        "enum": ["critical", "high", "medium", "low"],
+        "description": "Impact level based on user/system impact"
+      },
+      "description": {
+        "type": "string",
+        "description": "Detailed description of what's wrong and how it behaves"
+      }
+    }
+  },
+  "examples": [
+    {
+      "scenario": "Login failure with special characters",
+      "narrative": "Alice from QA reported that users cannot log in when their email contains a plus sign. The authentication service returns a 500 error.",
+      "entity": {
+        "type": "BugReport",
+        "title": "Login fails with special characters in email",
+        "reporter": "QA-Alice",
+        "component": "Authentication Service",
+        "severity": "high",
+        "description": "Login endpoint returns HTTP 500 when email contains + character"
+      }
+    },
+    {
+      "scenario": "Performance degradation",
+      "narrative": "DevOps monitoring detected that API response times have increased from 200ms to 2s after the latest deployment.",
+      "entity": {
+        "type": "BugReport",
+        "title": "API response time 10x slower",
+        "reporter": "DevOps-Monitoring",
+        "component": "API Gateway",
+        "severity": "critical",
+        "description": "All API endpoints showing 10x latency increase since deployment 1.2.3"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "type": "REPORTED_BY",
+      "direction": "from_bug_to_person",
+      "description": "Links bug to the person who reported it"
+    },
+    {
+      "type": "BLOCKS",
+      "direction": "from_bug_to_work",
+      "description": "Indicates when a bug blocks features or other work"
+    },
+    {
+      "type": "FIXED_BY",
+      "direction": "from_code_change_to_bug",
+      "description": "Links code changes that fix this bug"
+    }
+  ]
+}

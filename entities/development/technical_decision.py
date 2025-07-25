@@ -1,39 +1,24 @@
 """TechnicalDecision entity for Graphiti MCP Server."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class TechnicalDecision(BaseModel):
-    """
-    **AI Persona:** You are an expert entity extraction assistant.
-    
-    **Task:** Identify and extract information about Technical Decisions mentioned in the provided text context.
-    A TechnicalDecision represents an architectural or implementation choice made during development.
+    """Represents an architectural or technology choice made during development.
 
-    **Context:** The user will provide text containing potential mentions of technology choices or decisions.
-
-    **Extraction Instructions:**
-    Your goal is to accurately populate the fields (`decision_area`, `chosen_option`, `rationale`) 
-    based *only* on information explicitly or implicitly stated in the text.
-
-    1.  **Identify Core Mentions:** Look for statements about technology choices ("We decided to use X", "We chose Y over Z").
-    2.  **Extract Decision Area:** Identify the domain of the decision (architecture, framework, tool, etc.).
-    3.  **Extract Chosen Option:** Capture the specific option or approach that was selected.
-    4.  **Extract Rationale:** Document the reasoning, trade-offs, or constraints mentioned for the decision.
-    5.  **Handle Ambiguity:** If information for a field is missing or unclear, indicate that.
-
-    **Output Format:** Respond with the extracted data structured according to this Pydantic model.
+    Instructions for identifying and extracting technical decisions:
+    1. Look for decision language ("we decided", "chose", "selected", "going with")
+    2. Identify technology or architecture choices being made
+    3. Extract who made the decision (names or roles, NEVER generic "team")
+    4. Capture what was chosen and why
+    5. Note the area of decision (database, architecture, framework, etc.)
+    6. Only extract explicitly stated information
     """
 
-    decision_area: str = Field(
-        ...,
-        description='The area or domain of the technical decision (architecture, framework, tool, etc.).',
-    )
-    chosen_option: str = Field(
-        ...,
-        description='The option or approach that was chosen.',
-    )
-    rationale: str = Field(
-        ...,
-        description='The reasoning behind the decision. Only use information mentioned in the context.',
-    ) 
+    model_config = ConfigDict(extra='forbid')
+
+    title: str = Field(..., description="Brief descriptive title of the decision")
+    decision_maker: str = Field(..., description="Person(s) who made the decision (names or roles)")
+    decision_area: str = Field(..., description="Area: architecture|database|framework|language|infrastructure|security")
+    chosen_option: str = Field(..., description="What was chosen")
+    rationale: str = Field(..., description="Why this choice was made")

@@ -21,6 +21,12 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError  # Added for specific error handling
 from pydantic import BaseModel, Field
+from typing import Annotated
+try:
+    from pydantic import Field as PydanticField
+    from pydantic._internal._model_construction import complete_model_class
+except ImportError:
+    PydanticField = Field
 
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
@@ -346,24 +352,64 @@ with dynamic data such as user interactions, changing enterprise data, and exter
 Graphiti transforms information into a richly connected knowledge network, allowing you to 
 capture relationships between concepts, entities, and information. The system organizes data as episodes 
 (content snippets), nodes (entities), and facts (relationships between entities), creating a dynamic, 
-queryable memory store that evolves with new information. Graphiti supports multiple data formats, including 
-structured JSON data, enabling seamless integration with existing data pipelines and systems.
+queryable memory store that evolves with new information.
 
-Facts contain temporal metadata, allowing you to track the time of creation and whether a fact is invalid 
-(superseded by new information).
+## Entity Discovery and Usage
 
-Key capabilities:
-1. Add episodes (text, messages, or JSON) to the knowledge graph with the add_episode tool
-2. Search for nodes (entities) in the graph using natural language queries with search_nodes
-3. Find relevant facts (relationships between entities) with search_facts
-4. Retrieve specific entity edges or episodes by UUID
-5. Manage the knowledge graph with tools like delete_episode, delete_entity_edge, and clear_graph
+IMPORTANT: Before creating episodes with structured data, discover available entity types:
+1. Read resource `entity://list` to see all available entity types
+2. Read resource `entity://[entityName]` to get the schema for a specific entity
+3. Read resource `entity_instruction://[entityName]` to get usage examples and guidance
 
-The server connects to a database for persistent storage and uses language models for certain operations. 
-Each piece of information is organized by group_id, allowing you to maintain separate knowledge domains.
+## Episode Structure
 
-When adding information, provide descriptive names and detailed content to improve search quality. 
-When searching, use specific queries and consider filtering by group_id for more relevant results.
+Episodes can be created in multiple formats:
+
+1. **Text format**: Simple unstructured text that will be processed by extraction agents
+   ```json
+   {
+     "episode_body": "Alice reported a bug where login fails with special characters",
+     "format": "text"
+   }
+   ```
+
+2. **JSON format with narrative + entities**: Combines natural language context with structured data
+   ```json
+   {
+     "episode_body": {
+       "narrative": "During our meeting, Alice reported that users cannot log in when emails contain special characters. This is blocking the new customer onboarding.",
+       "entities": [
+         {
+           "type": "BugReport",
+           "title": "Login fails with special characters",
+           "reporter": "QA-Alice",
+           "component": "Authentication",
+           "severity": "high",
+           "description": "Returns 500 error when email contains +"
+         }
+       ]
+     },
+     "format": "json"
+   }
+   ```
+
+The narrative preserves context while entities provide structured data for precise querying.
+
+## Key Capabilities
+
+1. **Add episodes** with the add_episode tool (text or JSON with narrative+entities)
+2. **Search for nodes** (entities) using natural language queries with search_nodes
+3. **Find facts** (relationships between entities) with search_facts
+4. **Discover entity schemas** using resources at entity:// and entity_instruction://
+5. **Manage the knowledge graph** with delete_episode, delete_entity_edge, and clear_graph
+
+## Best Practices
+
+- Always check available entities before creating structured episodes
+- Include narrative context even when providing structured entities
+- Use specific names/roles for people (never generic "user")
+- Provide descriptive episode names to improve searchability
+- Query existing knowledge before adding new information
 
 For optimal performance, ensure the database is properly configured and accessible, and valid 
 API keys are provided for any language model operations.
@@ -375,6 +421,25 @@ mcp = FastMCP(
     'graphiti',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
+
+# Custom tool wrapper to handle JSON auto-parsing by MCP client
+def handle_json_input(func):
+    """Decorator to handle cases where MCP client auto-parses JSON strings to dicts."""
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            # If there's a validation error about episode_body being dict instead of string,
+            # try to handle it by stringifying the dict
+            if "episode_body" in str(e) and "Input should be a valid string" in str(e):
+                # This means the MCP client converted a JSON string to a dict
+                # We need to intercept this at a lower level
+                logger.warning(f"MCP client auto-parsed JSON string to dict, attempting to handle: {e}")
+                # Re-raise for now since we can't easily intercept this here
+                raise
+            else:
+                raise
+    return wrapper
 
 
 # Initialize Graphiti client
@@ -496,31 +561,28 @@ async def process_episode_queue(group_id: str):
         logger.info(f'Stopped episode queue worker for group_id: {group_id}')
 
 
-@mcp.tool()
-async def add_episode(
+async def add_episode_impl(
     name: str,
-    # MODIFIED: Always expect a string now
-    episode_body: str,
+    episode_body: Union[str, dict, list],
     group_id: Optional[str] = None,
-    # MODIFIED: Replaced 'source' with 'format'
-    format: str = 'text', # 'text', 'json', or 'message'
+    format: str = 'text',
     source_description: str = '',
     uuid: Optional[str] = None,
     entity_subset: Optional[list[str]] = None,
 ) -> Union[SuccessResponse, ErrorResponse]:
-    """(Revised Input) Add an episode to the Graphiti knowledge graph.
+    """Add an episode to the Graphiti knowledge graph.
 
     Processes the episode addition asynchronously in the background.
     Episodes for the same group_id are processed sequentially.
 
     Args:
         name (str): Name of the episode
-        episode_body (str): Supply the episode as **one stringified JSON blob**.
-                           • Triple‑escape all quotes so the inner JSON is valid inside the outer JSON args.
-                           • If format='json' → string must contain valid JSON.
-                           • If format='text' | 'message' → string is treated as raw text.
+        episode_body (Union[str, dict, list]): Episode content. If dict/list provided, 
+                           will be automatically stringified. If string starts with '{',
+                           format will be automatically set to 'json'.
         group_id (str, optional): A unique ID for this graph. Defaults to config.
-        format (str, optional): How to interpret the `episode_body` string ('text', 'json', 'message'). Defaults to 'text'.
+        format (str, optional): How to interpret the episode_body ('text', 'json', 'message'). 
+                           Auto-detected if episode_body is dict/list or string starts with '{'.
         source_description (str, optional): Description of the source.
         uuid (str, optional): Optional UUID for the episode.
         entity_subset (list[str], optional): Optional list of entity names to use.
@@ -533,6 +595,24 @@ async def add_episode(
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Auto-stringify JSON objects and auto-detect format
+        if isinstance(episode_body, (dict, list)):
+            # Convert dict/list to JSON string
+            episode_body_str = json.dumps(episode_body)
+            format = 'json'  # Auto-set format to json
+            logger.debug(f"Auto-stringified dict/list episode_body and set format to 'json'")
+        elif isinstance(episode_body, str) and episode_body.strip().startswith('{'):
+            # String that looks like JSON
+            episode_body_str = episode_body
+            if format == 'text':  # Only auto-set if not explicitly specified
+                format = 'json'
+                logger.debug(f"Auto-detected JSON format from string starting with '{'")
+        else:
+            # Regular string
+            episode_body_str = episode_body
+            logger.debug(f"Using string episode_body as-is")
+        
+        logger.debug(f"Final episode_body_str length: {len(episode_body_str)}, format: {format}")
         # Map string format to EpisodeType enum - Default to text
         source_type = EpisodeType.text
         if format.lower() == 'message':
@@ -549,10 +629,6 @@ async def add_episode(
 
         assert graphiti_client is not None, 'graphiti_client should not be None here'
         client = cast(Graphiti, graphiti_client)
-
-        # Directly use the input string - Parsing happens in the background task
-        episode_body_str = episode_body
-        logger.debug(f"Using provided episode_body string (length: {len(episode_body_str)})")
 
         # Define the episode processing function (captures current variables)
         async def process_episode():
@@ -648,6 +724,72 @@ async def add_episode(
         return {'error': f'Error queuing episode task: {error_msg}'}
 
 
+@mcp.tool()
+async def add_episode(
+    name: str,
+    episode_body: str,
+    group_id: Optional[str] = None,
+    format: str = 'text',
+    source_description: str = '',
+    uuid: Optional[str] = None,
+    entity_subset: Optional[list[str]] = None,
+) -> Union[SuccessResponse, ErrorResponse]:
+    """Add an episode to the Graphiti knowledge graph.
+
+    Processes the episode addition asynchronously in the background.
+    Episodes for the same group_id are processed sequentially.
+
+    Args:
+        name (str): Name of the episode
+        episode_body (str): Episode content as string. JSON strings are auto-detected.
+        group_id (str, optional): A unique ID for this graph. Defaults to config.
+        format (str, optional): How to interpret the episode_body ('text', 'json', 'message'). 
+        source_description (str, optional): Description of the source.
+        uuid (str, optional): Optional UUID for the episode.
+        entity_subset (list[str], optional): Optional list of entity names to use.
+    """
+    return await add_episode_impl(
+        name=name,
+        episode_body=episode_body,
+        group_id=group_id,
+        format=format,
+        source_description=source_description,
+        uuid=uuid,
+        entity_subset=entity_subset
+    )
+
+
+@mcp.tool()
+async def add_episode_json(
+    name: str,
+    episode_data: dict,
+    group_id: Optional[str] = None,
+    source_description: str = '',
+    uuid: Optional[str] = None,
+    entity_subset: Optional[list[str]] = None,
+) -> Union[SuccessResponse, ErrorResponse]:
+    """Add an episode with JSON data to the Graphiti knowledge graph.
+
+    Alternative tool for adding episodes when you have structured JSON data.
+    Automatically sets format to 'json' and stringifies the data.
+
+    Args:
+        name (str): Name of the episode
+        episode_data (dict): Episode content as JSON object
+        group_id (str, optional): A unique ID for this graph. Defaults to config.
+        source_description (str, optional): Description of the source.
+        uuid (str, optional): Optional UUID for the episode.
+        entity_subset (list[str], optional): Optional list of entity names to use.
+    """
+    return await add_episode_impl(
+        name=name,
+        episode_body=episode_data,
+        group_id=group_id,
+        format='json',
+        source_description=source_description,
+        uuid=uuid,
+        entity_subset=entity_subset
+    )
 
 
 @mcp.tool()
@@ -1219,6 +1361,21 @@ async def initialize_server() -> MCPConfig:
     logger.info(f"All registered entities after initialization: {len(get_entities())}")
     for entity_name in get_entities().keys():
         logger.info(f"  - Available entity: {entity_name}")
+    
+    # Create a resource that lists all available entities
+    @mcp.resource(
+        uri="entity://list",
+        name="Available Entities",
+        description="List of all available entity types in the knowledge graph",
+        mime_type="application/json"
+    )
+    def list_entities() -> dict:
+        """Returns a list of all available entity types."""
+        return {
+            "entities": list(get_entities().keys()),
+            "total": len(get_entities()),
+            "instruction": "Use entity://[entityName] to get the schema and entity_instruction://[entityName] for usage examples"
+        }
 
     llm_client = None
 
@@ -1303,18 +1460,80 @@ def _load_and_register_entity_module(file_path: Path) -> None:
         logger.error(f"Error loading entity module {file_path.name} ({full_module_path}): {str(e)}", exc_info=True)
         # Continue loading other modules
 
+# --- NEW: Helper function to create resources from entity JSON schemas ---
+def _create_entity_schema_resource(json_path: Path) -> None:
+    """Creates MCP resources from an entity JSON schema file."""
+    try:
+        with open(json_path, 'r') as f:
+            schema_data = json.load(f)
+        
+        entity_name = schema_data.get('name', json_path.stem)
+        
+        # Store schema data in closure for the resource functions
+        stored_schema = schema_data
+        
+        # Create schema resource at entity://[entityName]
+        @mcp.resource(
+            uri=f"entity://{entity_name}",
+            name=f"{entity_name} Entity Schema",
+            description=f"Schema and structure for the {entity_name} entity",
+            mime_type="application/json"
+        )
+        def get_schema() -> dict:
+            # Return just the schema portion
+            return {
+                "name": stored_schema.get("name"),
+                "description": stored_schema.get("description"),
+                "schema": stored_schema.get("schema")
+            }
+        
+        # Create instruction resource at entity_instruction://[entityName]
+        @mcp.resource(
+            uri=f"entity_instruction://{entity_name}",
+            name=f"{entity_name} Usage Instructions",
+            description=f"Usage guide and examples for the {entity_name} entity",
+            mime_type="application/json"
+        )
+        def get_instructions() -> dict:
+            # Return usage instructions and examples
+            return {
+                "name": stored_schema.get("name"),
+                "when_to_use": stored_schema.get("when_to_use"),
+                "examples": stored_schema.get("examples"),
+                "relationships": stored_schema.get("relationships")
+            }
+        
+        logger.info(f"Created entity resources: entity://{entity_name} and entity_instruction://{entity_name}")
+        
+    except Exception as e:
+        logger.error(f"Error creating resource from {json_path}: {str(e)}", exc_info=True)
+
+
 # --- NEW: Helper function for recursive loading ---
 def _load_modules_recursive(base_dir: Path) -> None:
     """Recursively finds and loads Python entity modules from a base directory."""
     logger.info(f"Recursively loading entities from: {base_dir}")
     python_files_found = 0
+    json_files_found = 0
+    
+    # First, load all Python modules
     for file_path in base_dir.rglob('*.py'):
         if file_path.name.startswith('__'):
             continue  # Skip __init__.py etc.
         python_files_found += 1
         _load_and_register_entity_module(file_path)
+    
+    # Then, create resources from JSON schema files
+    for json_path in base_dir.rglob('*.json'):
+        if json_path.name.startswith('__'):
+            continue
+        json_files_found += 1
+        _create_entity_schema_resource(json_path)
+    
     if python_files_found == 0:
         logger.warning(f"No Python files found for entity loading in {base_dir}")
+    if json_files_found > 0:
+        logger.info(f"Created {json_files_found} entity schema resources from JSON files")
 
 
 # --- MODIFIED: Main loading function now handles selection spec ---
