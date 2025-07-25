@@ -399,6 +399,7 @@ The narrative preserves context while entities provide structured data for preci
 ## Key Capabilities
 
 1. **Add episodes** with the add_episode tool (text or JSON with narrative+entities)
+   - Episodes are stored in graph namespaces identified by group_id (defaults to "global")
 2. **Search for nodes** (entities) using natural language queries with search_nodes
 3. **Find facts** (relationships between entities) with search_facts
 4. **Discover entity schemas** using resources at entity:// and entity_instruction://
@@ -411,6 +412,7 @@ The narrative preserves context while entities provide structured data for preci
 - Use specific names/roles for people (never generic "user")
 - Provide descriptive episode names to improve searchability
 - Query existing knowledge before adding new information
+- Use group_id parameter to organize data in different namespaces (defaults to "global")
 
 For optimal performance, ensure the database is properly configured and accessible, and valid 
 API keys are provided for any language model operations.
@@ -574,7 +576,7 @@ async def process_episode_queue(group_id: str):
 async def add_episode(
     name: str,
     episode_body: Any,  # Accept Any to handle both strings and dicts from MCP client
-    group_id: Optional[str] = None,
+    group_id: str = "global",
     format: str = 'text',
     source_description: str = '',
     uuid: Optional[str] = None,
@@ -590,7 +592,7 @@ async def add_episode(
         episode_body (Union[str, dict, list]): Episode content. If dict/list provided, 
                            will be automatically stringified. If string starts with '{',
                            format will be automatically set to 'json'.
-        group_id (str, optional): A unique ID for this graph. Defaults to config.
+        group_id (str, optional): A unique ID for this graph. Defaults to "global".
         format (str, optional): How to interpret the episode_body ('text', 'json', 'message'). 
                            Auto-detected if episode_body is dict/list or string starts with '{'.
         source_description (str, optional): Description of the source.
@@ -632,9 +634,9 @@ async def add_episode(
         # ---> Logging <---
         logger.debug(f"Determined source_type: {source_type} based on format: {format}")
 
-        # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
-        group_id_str = str(effective_group_id) if effective_group_id is not None else ''
+        # Use the provided group_id (defaults to "global")
+        effective_group_id = group_id
+        group_id_str = str(effective_group_id)
         logger.debug(f"Effective group_id: {group_id_str}")
 
         assert graphiti_client is not None, 'graphiti_client should not be None here'
@@ -736,7 +738,7 @@ async def add_episode(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: Optional[list[str]] = None,
+    group_ids: list[str] = ["global"],
     max_nodes: int = 10,
     center_node_uuid: Optional[str] = None,
     entity: str = '',  # cursor seems to break with None
@@ -748,7 +750,7 @@ async def search_nodes(
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: List of group IDs to filter results (default: ["global"])
         max_nodes: Maximum number of nodes to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
         entity: Optional single entity to filter results (permitted: "Preference", "Procedure")
@@ -759,10 +761,8 @@ async def search_nodes(
         return ErrorResponse(error='Graphiti client not initialized')
 
     try:
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
-        )
+        # Use the provided group_ids (defaults to ["global"])
+        effective_group_ids = group_ids
 
         # Configure the search
         if center_node_uuid is not None:
@@ -817,7 +817,7 @@ async def search_nodes(
 @mcp.tool()
 async def search_facts(
     query: str,
-    group_ids: Optional[list[str]] = None,
+    group_ids: list[str] = ["global"],
     max_facts: int = 10,
     center_node_uuid: Optional[str] = None,
 ) -> Union[FactSearchResponse, ErrorResponse]:
@@ -825,7 +825,7 @@ async def search_facts(
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: List of group IDs to filter results (default: ["global"])
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
@@ -835,10 +835,8 @@ async def search_facts(
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
-        )
+        # Use the provided group_ids (defaults to ["global"])
+        effective_group_ids = group_ids
 
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -957,12 +955,12 @@ async def get_entity_edge(uuid: str) -> Union[dict[str, Any], ErrorResponse]:
 
 @mcp.tool()
 async def get_episodes(
-    group_id: Optional[str] = None, last_n: int = 10
+    group_id: str = "global", last_n: int = 10
 ) -> Union[list[dict[str, Any]], EpisodeSearchResponse, ErrorResponse]:
     """Get the most recent episodes for a specific group.
 
     Args:
-        group_id: ID of the group to retrieve episodes from. If not provided, uses the default group_id.
+        group_id: ID of the group to retrieve episodes from. Defaults to "global".
         last_n: Number of most recent episodes to retrieve (default: 10)
     """
     global graphiti_client
@@ -971,8 +969,8 @@ async def get_episodes(
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        # Use the provided group_id (defaults to "global")
+        effective_group_id = group_id
 
         if not isinstance(effective_group_id, str):
             return {'error': 'Group ID must be a string'}
