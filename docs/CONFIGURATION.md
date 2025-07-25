@@ -105,6 +105,7 @@ These variables in the `.env` file configure shared services (like Neo4j) or pro
 | `NEO4J_HEAP_INITIAL`       | Initial Java heap size for Neo4j (e.g., "512m", "1g").                                                   | string | `512m`                       | No       | `NEO4J_HEAP_INITIAL=1g`                        |
 | `NEO4J_HEAP_MAX`           | Maximum Java heap size for Neo4j (e.g., "1g", "2g").                                                    | string | `1G`                         | No       | `NEO4J_HEAP_MAX=2g`                            |
 | `NEO4J_PAGECACHE`          | Page cache size for Neo4j (e.g., "512m", "1g").                                                         | string | `512m`                       | No       | `NEO4J_PAGECACHE=1g`                           |
+| `EMBEDDER_MODEL`           | Model name for embeddings (if using separate embedder).                                          | string | `text-embedding-3-small`     | No       | `EMBEDDER_MODEL=text-embedding-ada-002`        |
 | `OPENAI_API_KEY`           | Your OpenAI API key. Required if using OpenAI models.                                                   | string | N/A                          | Yes*     | `OPENAI_API_KEY=sk-xxxxxxxxxx`                 |
 | `OPENAI_BASE_URL`          | Base URL for the OpenAI API (or compatible alternative).                                                | string | `https://api.openai.com/v1`  | No       | `OPENAI_BASE_URL=http://localhost:1234/v1`     |
 | `MODEL_NAME`               | Default LLM model name used by MCP servers if not overridden.                                           | string | `gpt-4o`                     | No       | `MODEL_NAME=gpt-3.5-turbo`                     |
@@ -113,6 +114,33 @@ These variables in the `.env` file configure shared services (like Neo4j) or pro
 | `MCP_GRAPHITI_REPO_PATH`   | Explicit path to the repository root (usually auto-detected by the CLI).                                | string | Auto-detected                | No       | `MCP_GRAPHITI_REPO_PATH=/path/to/repo`         |
 
 *Required if using OpenAI-based features.*
+
+### OpenRouter Configuration
+
+MCP-Graphiti supports using [OpenRouter](https://openrouter.ai) as an LLM provider. OpenRouter provides access to multiple LLM providers through a single API endpoint.
+
+To use OpenRouter:
+
+1. **Set the base URL and API key**:
+   ```bash
+   export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+   export OPENAI_API_KEY=sk-or-your-openrouter-api-key
+   export MODEL_NAME=qwen/qwen-3-32b  # or any model available on OpenRouter
+   ```
+
+2. **Optional: Specify provider preferences** (Note: Provider routing is not yet fully supported):
+   ```bash
+   # Use a specific provider
+   export OPENROUTER_PROVIDER=cerebras
+   export OPENROUTER_ALLOW_FALLBACKS=false
+   
+   # Or specify multiple providers in order
+   export OPENROUTER_PROVIDER_ORDER=cerebras,together,openai
+   ```
+
+When OpenRouter is detected, the MCP server will attempt to use `OpenAIGenericClient` for better compatibility. If not available in your version of graphiti-core, it will fall back to the standard `OpenAIClient`.
+
+**Note**: OpenRouter provider routing via `extra_body` parameters is not currently supported by graphiti-core. OpenRouter will automatically select available providers based on your model choice.
 
 **Security Note on `NEO4J_PASSWORD`:**
 

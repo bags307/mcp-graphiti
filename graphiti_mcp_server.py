@@ -27,6 +27,17 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
+
+# Try to import OpenAIGenericClient (may not be available in all versions)
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+    HAS_OPENAI_GENERIC_CLIENT = True
+except ImportError:
+    HAS_OPENAI_GENERIC_CLIENT = False
+    OpenAIGenericClient = None  # type: ignore
+
+from graphiti_core.prompts import prompt_library
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
     NODE_HYBRID_SEARCH_NODE_DISTANCE,
@@ -104,6 +115,10 @@ class GraphitiConfig(BaseModel):
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
     model_name: Optional[str] = None
+    # Separate embedder configuration
+    embedder_api_key: Optional[str] = None
+    embedder_base_url: Optional[str] = None
+    embedder_model: Optional[str] = None
     group_id: Optional[str] = None
     use_custom_entities: bool = False
     # entity_subset: Optional[list[str]] = None # REMOVED: This is now controlled by loading mechanism via --entities arg
@@ -117,6 +132,11 @@ class GraphitiConfig(BaseModel):
         openai_api_key = os.environ.get('OPENAI_API_KEY')
         openai_base_url = os.environ.get('OPENAI_BASE_URL')
         model_name = os.environ.get('MODEL_NAME')
+        
+        # Embedder configuration (separate from LLM)
+        embedder_api_key = os.environ.get('EMBEDDER_API_KEY')
+        embedder_base_url = os.environ.get('EMBEDDER_BASE_URL')
+        embedder_model = os.environ.get('EMBEDDER_MODEL')
 
         # Environment context check for password hardening
         # Use GRAPHITI_ENV if set, else treat as non-dev
@@ -137,6 +157,9 @@ class GraphitiConfig(BaseModel):
             openai_api_key=openai_api_key,
             openai_base_url=openai_base_url,
             model_name=model_name,
+            embedder_api_key=embedder_api_key,
+            embedder_base_url=embedder_base_url,
+            embedder_model=embedder_model,
         )
 
 
@@ -248,11 +271,26 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
     if not config.neo4j_uri or not config.neo4j_user or not config.neo4j_password:
         raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
+    # Create separate embedder client if configured
+    embedder = None
+    if config.embedder_api_key:
+        logger.info('Creating separate OpenAI embedder client')
+        embedder_config = OpenAIEmbedderConfig(
+            api_key=config.embedder_api_key,
+            embedding_model=config.embedder_model or "text-embedding-3-small"
+        )
+        if config.embedder_base_url:
+            embedder_config.base_url = config.embedder_base_url
+        
+        embedder = OpenAIEmbedder(config=embedder_config)
+        logger.info(f'Configured separate embedder: {config.embedder_model or "text-embedding-3-small"} at {config.embedder_base_url or "https://api.openai.com/v1"}')
+
     graphiti_client = Graphiti(
         uri=config.neo4j_uri,
         user=config.neo4j_user,
         password=config.neo4j_password,
         llm_client=llm_client,
+        embedder=embedder,
     )
 
     if destroy_graph:
@@ -870,6 +908,67 @@ def create_llm_client(api_key: Optional[str] = None, model: Optional[str] = None
     # Set model if provided
     if model:
         llm_config.model = model
+    
+    # Check if we're using OpenRouter or another OpenAI-compatible service
+    base_url = config.openai_base_url
+    if base_url and 'openrouter.ai' in base_url:
+        # Use OpenAIGenericClient for OpenRouter
+        logger.info(f"Detected OpenRouter API endpoint: {base_url}")
+        
+        if HAS_OPENAI_GENERIC_CLIENT:
+            logger.info("Using OpenAIGenericClient for better compatibility")
+            
+            # Set the base URL in config
+            llm_config.base_url = base_url
+            
+            # Check for OpenRouter provider configuration
+            openrouter_provider = os.environ.get('OPENROUTER_PROVIDER')
+            openrouter_provider_order = os.environ.get('OPENROUTER_PROVIDER_ORDER')
+            
+            if openrouter_provider or openrouter_provider_order:
+                logger.warning(
+                    "OpenRouter provider configuration detected via environment variables. "
+                    "Note: Graphiti does not currently support passing extra_body parameters "
+                    "for provider routing. OpenRouter will use automatic provider selection."
+                )
+            
+            return OpenAIGenericClient(config=llm_config)
+        else:
+            logger.warning(
+                "OpenAIGenericClient not available in this version of graphiti-core. "
+                "Using standard OpenAIClient instead. Consider updating graphiti-core for better OpenRouter support."
+            )
+            # Still set the base URL for OpenRouter
+            llm_config.base_url = base_url
+            # Fall through to use standard OpenAIClient
+    
+    # Check for OpenRouter provider configuration
+    openrouter_provider = os.environ.get('OPENROUTER_PROVIDER')
+    openrouter_provider_order = os.environ.get('OPENROUTER_PROVIDER_ORDER')
+    
+    # If using OpenRouter with provider specification
+    if openrouter_provider or openrouter_provider_order:
+        extra_body = {}
+        provider_config = {}
+        
+        if openrouter_provider:
+            # Single provider specification
+            provider_config['only'] = [openrouter_provider.lower()]
+            provider_config['allow_fallbacks'] = os.environ.get('OPENROUTER_ALLOW_FALLBACKS', 'false').lower() == 'true'
+        elif openrouter_provider_order:
+            # Multiple providers in order
+            provider_config['order'] = [p.strip().lower() for p in openrouter_provider_order.split(',')]
+        
+        extra_body['provider'] = provider_config
+        
+        # Note: This requires graphiti-core to support extra_body in LLMConfig
+        # For now, we'll log a warning
+        logger.warning(
+            f"OpenRouter provider configuration detected but not yet supported by graphiti-core: {provider_config}"
+        )
+        logger.info(
+            "To use OpenRouter with provider routing, graphiti-core needs to be updated to support extra_body parameter"
+        )
 
     # Create and return the client
     return OpenAIClient(config=llm_config)
@@ -1002,7 +1101,7 @@ async def initialize_server() -> MCPConfig:
     if args.model or config.openai_api_key:
         # Override model from command line if specified
 
-        config.model_name = args.model or DEFAULT_LLM_MODEL
+        config.model_name = args.model or config.model_name or DEFAULT_LLM_MODEL
 
         # Create the OpenAI client
         llm_client = create_llm_client(api_key=config.openai_api_key, model=config.model_name)
