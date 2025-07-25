@@ -90,6 +90,7 @@ class OpenRouterClient(BaseClientClass):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int = 2048,
+        model_size: typing.Any = None,  # Accept but ignore model_size parameter
     ) -> dict[str, typing.Any]:
         """Generate response with provider routing support for OpenRouter."""
         openai_messages: list[ChatCompletionMessageParam] = []
