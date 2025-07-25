@@ -525,6 +525,8 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
 episode_queues: dict[str, asyncio.Queue] = {}
 # Dictionary to track if a worker is running for each group_id
 queue_workers: dict[str, bool] = {}
+# Dictionary to store episode queue worker tasks by group_id
+episode_tasks: dict[str, asyncio.Task] = {}
 
 
 async def process_episode_queue(group_id: str):
@@ -558,6 +560,9 @@ async def process_episode_queue(group_id: str):
         logger.error(f'Unexpected error in queue worker for group_id {group_id}: {str(e)}')
     finally:
         queue_workers[group_id] = False
+        # Clean up task reference when worker stops
+        if group_id in episode_tasks:
+            del episode_tasks[group_id]
         logger.info(f'Stopped episode queue worker for group_id: {group_id}')
 
 
@@ -704,7 +709,8 @@ async def add_episode(
 
         logger.debug(f"Ensuring worker task exists for group_id: {group_id_str}")
         if not queue_workers.get(group_id_str, False):
-            asyncio.create_task(process_episode_queue(group_id_str))
+            task = asyncio.create_task(process_episode_queue(group_id_str))
+            episode_tasks[group_id_str] = task  # Store reference to prevent garbage collection
 
         logger.debug(f"Returning immediate 'queued' response for episode '{name}'")
         return {

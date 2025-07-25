@@ -7,10 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Set the working directory in the container
 WORKDIR /app
 
-# Install curl (needed for the container health‑check) and a *pinned* version of
-# uv.
+# Install curl (needed for the container health‑check), git (needed for GitHub dependencies), 
+# and a *pinned* version of uv.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl git \
     # Install uv
     && pip install --no-cache-dir uv==0.6.14 \
     # Verify installation

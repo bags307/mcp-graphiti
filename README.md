@@ -16,6 +16,7 @@ Fork of the [getzep/graphiti](https://github.com/getzep/graphiti) example with a
    graphiti compose   # generates docker-compose.yml and updates .cursor/mcp.json
    graphiti up -d
    ```
+
    The root server runs on port **8000**; project containers start at **8001**.
 3. **Create a project**
    ```bash
@@ -23,20 +24,25 @@ Fork of the [getzep/graphiti](https://github.com/getzep/graphiti) example with a
    graphiti init my-kg        # writes ai/graph/mcp-config.yaml
    # add entity definitions under ai/graph/entities/
    ```
+
    Rerun `graphiti compose && graphiti up -d` from anywhere to start its container.
 
 Once running you can:
+
 - Check `http://localhost:8000/graphiti/status`.
 - Connect MCP‑compatible tools to `http://localhost:800{N}/sse`.
 - Browse Neo4j at `http://localhost:7474` using the credentials in `.env`.
 
 ### Security note
+
 If `NEO4J_PASSWORD` remains `password` the server refuses to start unless `GRAPHITI_ENV=dev`. Always use a strong password in production.
 
 ## Why this fork?
+
 The upstream repository assumes one server per compose file. Here a single compose file manages many project servers that share Neo4j. Each service gets its own `group_id`, entities and model so projects stay isolated while running on the same database.
 
 ### Highlights
+
 - **Project isolation** – different extraction rules or models never collide.
 - **Editor auto‑discovery** – ports are written to `.cursor/mcp.json`.
 - **Crash containment** – a bad prompt only restarts its container.
@@ -46,6 +52,7 @@ The upstream repository assumes one server per compose file. Here a single compo
 Leave `mcp-projects.yaml` empty if you only need the root server.
 
 ## OpenRouter Configuration
+
 The server supports OpenRouter as an LLM provider with advanced routing capabilities:
 
 ```bash
@@ -72,7 +79,7 @@ Create a `CLAUDE.md` file in your project root with these MANDATORY instructions
 ```markdown
 # CLAUDE.md - Graphiti Memory Instructions
 
-## CRITICAL: Memory Graph Usage
+## CRITICAL: Memory Graph Usage - the mcp server may also be "memory-bank"
 
 You have access to a Graphiti memory graph for this project. You MUST use it constantly throughout our conversation.
 
@@ -117,6 +124,7 @@ alice_prefs = await mcp__graphiti__search_nodes(
 You MUST create episodes for:
 
 1. **User Preferences** (immediately when expressed):
+
 ```python
 # When someone expresses a preference
 await mcp__graphiti__add_episode(
@@ -150,6 +158,7 @@ await mcp__graphiti__add_episode(
 ```
 
 2. **Technical Decisions** (as soon as made):
+
 ```python
 # When any choice is made
 await mcp__graphiti__add_episode(
@@ -168,6 +177,7 @@ await mcp__graphiti__add_episode(
 ```
 
 3. **Problems and Solutions** (when encountered):
+
 ```python
 # When debugging or solving issues
 await mcp__graphiti__add_episode(
@@ -183,6 +193,7 @@ await mcp__graphiti__add_episode(
 ```
 
 4. **Code Patterns** (when established):
+
 ```python
 # When creating reusable patterns
 await mcp__graphiti__add_episode(
@@ -200,6 +211,7 @@ await mcp__graphiti__add_episode(
 ```
 
 5. **Project Information** (any project details):
+
 ```python
 # Project goals, requirements, constraints
 await mcp__graphiti__add_episode(
@@ -215,22 +227,23 @@ await mcp__graphiti__add_episode(
 ### MANDATORY BEHAVIOR PATTERNS
 
 1. **Start of EVERY conversation**:
+
    - Search for project context
    - Search for user preferences
    - Search for recent work
    - Load established procedures
-
 2. **Before suggesting ANYTHING**:
+
    - Search if there's an established preference
    - Search if there's a defined procedure
    - Search for similar past decisions
-
 3. **After completing ANY task**:
+
    - Create episode documenting what was done
    - Create episode for any decisions made
    - Create episode for any patterns discovered
-
 4. **When user corrects you**:
+
    - Immediately create preference episode
    - Search for related preferences to update mental model
 
@@ -248,6 +261,7 @@ await mcp__graphiti__add_episode(
 ## Project-Specific Memory Schema
 
 [Your project-specific entities and relationships go here - see Step 2]
+
 ```
 
 ### Step 2: Define Your Project's Memory Schema
@@ -275,9 +289,11 @@ Extract when: User mentions services, modules, libraries, or system parts
 ```
 
 ### Entity: Feature
+
 Represents a product feature or user story.
 
 Extract when: User discusses features, requirements, or user stories
+
 ```python
 {
     "type": "Feature", 
@@ -290,9 +306,11 @@ Extract when: User discusses features, requirements, or user stories
 ```
 
 ### Entity: Configuration
+
 Represents system configuration or settings.
 
 Extract when: User mentions config, settings, environment variables
+
 ```python
 {
     "type": "Configuration",
@@ -308,20 +326,23 @@ Extract when: User mentions config, settings, environment variables
 ### Relationships to Track
 
 1. **DEPENDS_ON**: (Component) --[DEPENDS_ON]--> (Component)
+
    - Extract when: "X needs Y", "X requires Y", "X uses Y"
-
 2. **IMPLEMENTS**: (Component) --[IMPLEMENTS]--> (Feature)
-   - Extract when: "X implements Y", "Y is handled by X"
 
+   - Extract when: "X implements Y", "Y is handled by X"
 3. **CONFIGURES**: (Configuration) --[CONFIGURES]--> (Component)
+
    - Extract when: Settings or config is associated with a component
 
 ### Schema Evolution
 
 When you identify information that doesn't fit existing entities:
+
 1. Propose new entity type in an episode
 2. Document the structure and extraction rules
 3. Start using it immediately
+
 ```
 
 ### Step 3: Create Project Entity Definitions
@@ -340,7 +361,7 @@ from typing import List, Optional
 class Component(BaseModel):
     """
     Software component in the system architecture.
-    
+  
     Extract when user mentions:
     - Services, microservices
     - Modules, packages
@@ -353,11 +374,11 @@ class Component(BaseModel):
     description: str = Field(description="What this component does")
     dependencies: List[str] = Field(description="Other components this depends on")
     owner: Optional[str] = Field(description="Team or person responsible")
-    
+  
 class Feature(BaseModel):
     """
     Product feature or user story.
-    
+  
     Extract when user mentions:
     - Features, functionality
     - User stories, requirements
@@ -373,7 +394,7 @@ class Feature(BaseModel):
 class Configuration(BaseModel):
     """
     System configuration or settings.
-    
+  
     Extract when user mentions:
     - Config, configuration
     - Settings, parameters
@@ -388,7 +409,7 @@ class Configuration(BaseModel):
 class TechnicalDecision(BaseModel):
     """
     Architectural or implementation decision.
-    
+  
     Extract when user:
     - Makes technology choices
     - Decides between alternatives
@@ -405,7 +426,7 @@ class TechnicalDecision(BaseModel):
 class Issue(BaseModel):
     """
     Bug, problem, or issue encountered.
-    
+  
     Extract when user mentions:
     - Bugs, errors, issues
     - Problems, failures
@@ -436,16 +457,19 @@ graphiti init [project-name]
 ```
 
 2. Copy entity definitions:
+
 ```bash
 cp ai/graph/entities/project_entities.py ai/graph/entities/
 ```
 
 3. Start the memory server:
+
 ```bash
 graphiti compose && graphiti up -d
 ```
 
 4. Configure your AI tool to use the MCP server at `http://localhost:800X/sse`
+
 ```
 
 ### What This Gives You
@@ -467,3 +491,4 @@ Setting `NEO4J_DESTROY_ENTIRE_GRAPH=true` wipes *all* projects the next time you
 PRs and issues are welcome.
 
 © 2025 rawr‑ai • MIT License
+```
