@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## AI Agent Instructions
+
+For comprehensive guidance on using the Graphiti MCP tools and working with this codebase, see:
+- **AGENT_INSTRUCTIONS.md**: High-level overview and key principles
+- **project_assets/rules/ai-agents/**: Detailed documentation for AI agents
+  - `graphiti-quick-reference.md`: MCP tool reference
+  - `graphiti-mcp-core-rules.md`: Comprehensive usage guide
+  - `graphiti-common-patterns.md`: Proven patterns and examples
+  - `graphiti-troubleshooting.md`: Common issues and solutions
+
 ## Core Architecture
 
 This repository implements a **Graphiti MCP (Model Context Protocol) Server ecosystem** that provides AI agents with knowledge graph capabilities using Neo4j as the backend database. The system supports multi-project isolation where each project can have its own entities, configuration, and graph namespace while sharing the same Neo4j instance.
