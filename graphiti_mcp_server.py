@@ -37,6 +37,140 @@ except ImportError:
     OpenAIGenericClient = None  # type: ignore
 
 from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.models import Message
+
+# Add typing imports for custom client
+import typing
+from pydantic import BaseModel
+from openai.types.chat import ChatCompletionMessageParam
+import openai
+
+# Import standard errors
+from openai import RateLimitError
+try:
+    from openai import RefusalError
+except ImportError:
+    # Fallback if RefusalError doesn't exist
+    class RefusalError(Exception):
+        pass
+
+
+# Use OpenAIGenericClient as base if available for better schema injection
+BaseClientClass = OpenAIGenericClient if HAS_OPENAI_GENERIC_CLIENT else OpenAIClient
+
+class OpenRouterClient(BaseClientClass):
+    """Custom OpenAI client that supports provider routing for OpenRouter."""
+    
+    def __init__(
+        self, 
+        config: LLMConfig | None = None, 
+        cache: bool = False, 
+        client: typing.Any = None,
+        provider: dict[str, typing.Any] | None = None
+    ):
+        """Initialize OpenRouterClient with provider routing support.
+        
+        Args:
+            config: LLM configuration
+            cache: Whether to use caching
+            client: Optional pre-configured client
+            provider: Provider routing configuration (e.g., {"only": ["cerebras"]})
+        """
+        super().__init__(config, cache, client)
+        self.provider = provider
+        
+    async def _generate_response(
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = 2048,
+    ) -> dict[str, typing.Any]:
+        """Generate response with provider routing support for OpenRouter."""
+        openai_messages: list[ChatCompletionMessageParam] = []
+        
+        # Check if we're using Cerebras and need JSON output
+        using_cerebras = False
+        if self.provider and response_model:
+            # Check if provider config includes cerebras
+            provider_list = self.provider.get('only', [])
+            if 'cerebras' in provider_list:
+                using_cerebras = True
+                logger.info("Detected Cerebras provider with structured output - will inject JSON instruction")
+        
+        for i, m in enumerate(messages):
+            m.content = self._clean_input(m.content)
+            
+            # Inject JSON instruction for Cerebras if needed
+            if using_cerebras and response_model and i == len(messages) - 1:
+                # Add JSON instruction to the last user message
+                m.content = f"{m.content}\n\nPlease respond with valid JSON."
+            
+            if m.role == 'user':
+                openai_messages.append({'role': 'user', 'content': m.content})
+            elif m.role == 'system':
+                openai_messages.append({'role': 'system', 'content': m.content})
+        
+        try:
+            # Build request parameters
+            request_params = {
+                'model': self.model or 'gpt-4o-mini',
+                'messages': openai_messages,
+                'temperature': self.temperature,
+                'max_tokens': max_tokens or self.max_tokens,
+            }
+            
+            # Add provider routing if configured (for OpenRouter)
+            # OpenRouter expects provider configuration in extra_body, not as a direct parameter
+            if self.provider:
+                request_params['extra_body'] = {'provider': self.provider}
+                logger.info(f"OpenRouterClient: Adding provider routing via extra_body: {self.provider}")
+            else:
+                logger.debug("OpenRouterClient: No provider configuration specified")
+            
+            # Add response_format if using structured output
+            if response_model:
+                request_params['response_format'] = {'type': 'json_object'}
+                # For structured output, we'll parse manually since OpenRouter may not support beta.parse
+                
+            # Log the full request parameters (excluding messages for brevity)
+            debug_params = {k: v for k, v in request_params.items() if k != 'messages'}
+            logger.info(f"OpenRouterClient: Final request parameters: {debug_params}")
+                
+            # Use standard chat completions endpoint for OpenRouter compatibility
+            response = await self.client.chat.completions.create(**request_params)
+
+            response_object = response.choices[0].message
+
+            # Handle structured output manually if response_model was specified
+            if response_model and response_object.content:
+                try:
+                    import json
+                    parsed_content = json.loads(response_object.content)
+                    # Validate against the response model
+                    validated = response_model(**parsed_content)
+                    return validated.model_dump()
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.error(f"Failed to parse structured response: {e}")
+                    # Fall back to regular content handling
+                    
+            # Handle regular text response
+            if response_object.content:
+                return {'content': response_object.content}
+            elif hasattr(response_object, 'refusal') and response_object.refusal:
+                raise RefusalError(response_object.refusal)
+            else:
+                raise Exception(f'Invalid response from LLM: {response_object}')
+                
+        except openai.LengthFinishReasonError as e:
+            raise Exception(f'Output length exceeded max tokens {max_tokens or self.max_tokens}: {e}') from e
+        except openai.RateLimitError as e:
+            raise RateLimitError from e
+        except Exception as e:
+            logger.error(f'Error in generating LLM response: {e}')
+            raise
+
+
+# Additional imports for Graphiti
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
@@ -893,14 +1027,14 @@ async def get_status() -> StatusResponse:
 
 
 def create_llm_client(api_key: Optional[str] = None, model: Optional[str] = None) -> LLMClient:
-    """Create an OpenAI LLM client.
+    """Create an OpenAI LLM client with support for extra_body parameters.
 
     Args:
         api_key: API key for the OpenAI service
         model: Model name to use
 
     Returns:
-        An instance of the OpenAI LLM client
+        An instance of the OpenAI LLM client (custom OpenRouterClient if extra_body needed)
     """
     # Create config with provided API key and model
     llm_config = LLMConfig(api_key=api_key)
@@ -909,68 +1043,59 @@ def create_llm_client(api_key: Optional[str] = None, model: Optional[str] = None
     if model:
         llm_config.model = model
     
-    # Check if we're using OpenRouter or another OpenAI-compatible service
-    base_url = config.openai_base_url
-    if base_url and 'openrouter.ai' in base_url:
-        # Use OpenAIGenericClient for OpenRouter
-        logger.info(f"Detected OpenRouter API endpoint: {base_url}")
-        
-        if HAS_OPENAI_GENERIC_CLIENT:
-            logger.info("Using OpenAIGenericClient for better compatibility")
-            
-            # Set the base URL in config
-            llm_config.base_url = base_url
-            
-            # Check for OpenRouter provider configuration
-            openrouter_provider = os.environ.get('OPENROUTER_PROVIDER')
-            openrouter_provider_order = os.environ.get('OPENROUTER_PROVIDER_ORDER')
-            
-            if openrouter_provider or openrouter_provider_order:
-                logger.warning(
-                    "OpenRouter provider configuration detected via environment variables. "
-                    "Note: Graphiti does not currently support passing extra_body parameters "
-                    "for provider routing. OpenRouter will use automatic provider selection."
-                )
-            
-            return OpenAIGenericClient(config=llm_config)
-        else:
-            logger.warning(
-                "OpenAIGenericClient not available in this version of graphiti-core. "
-                "Using standard OpenAIClient instead. Consider updating graphiti-core for better OpenRouter support."
-            )
-            # Still set the base URL for OpenRouter
-            llm_config.base_url = base_url
-            # Fall through to use standard OpenAIClient
-    
-    # Check for OpenRouter provider configuration
+    # Check for OpenRouter provider configuration first
     openrouter_provider = os.environ.get('OPENROUTER_PROVIDER')
     openrouter_provider_order = os.environ.get('OPENROUTER_PROVIDER_ORDER')
+    provider_config = None
     
-    # If using OpenRouter with provider specification
+    # If using OpenRouter with provider specification, build provider config
     if openrouter_provider or openrouter_provider_order:
-        extra_body = {}
         provider_config = {}
         
         if openrouter_provider:
-            # Single provider specification
+            # Single provider specification - use 'only' to restrict to specific provider
             provider_config['only'] = [openrouter_provider.lower()]
-            provider_config['allow_fallbacks'] = os.environ.get('OPENROUTER_ALLOW_FALLBACKS', 'false').lower() == 'true'
+            # Check if fallbacks should be allowed (default false for 'only' specification)
+            allow_fallbacks = os.environ.get('OPENROUTER_ALLOW_FALLBACKS', 'false').lower() == 'true'
+            provider_config['allow_fallbacks'] = allow_fallbacks
+            logger.info(f"Configuring OpenRouter with single provider: {openrouter_provider}, fallbacks: {allow_fallbacks}")
         elif openrouter_provider_order:
-            # Multiple providers in order
-            provider_config['order'] = [p.strip().lower() for p in openrouter_provider_order.split(',')]
+            # Multiple providers in preferred order - use 'order' for prioritization
+            providers = [p.strip().lower() for p in openrouter_provider_order.split(',') if p.strip()]
+            provider_config['order'] = providers
+            # Check if fallbacks should be allowed (default true for order specification)
+            allow_fallbacks = os.environ.get('OPENROUTER_ALLOW_FALLBACKS', 'true').lower() == 'true'
+            provider_config['allow_fallbacks'] = allow_fallbacks
+            logger.info(f"Configuring OpenRouter with provider order: {providers}, fallbacks: {allow_fallbacks}")
         
-        extra_body['provider'] = provider_config
+        logger.info(f"OpenRouter provider configuration: {provider_config}")
+    
+    # Check if we're using OpenRouter or another OpenAI-compatible service
+    base_url = config.openai_base_url
+    if base_url and 'openrouter.ai' in base_url:
+        logger.info(f"Detected OpenRouter API endpoint: {base_url}")
+        llm_config.base_url = base_url
         
-        # Note: This requires graphiti-core to support extra_body in LLMConfig
-        # For now, we'll log a warning
-        logger.warning(
-            f"OpenRouter provider configuration detected but not yet supported by graphiti-core: {provider_config}"
-        )
-        logger.info(
-            "To use OpenRouter with provider routing, graphiti-core needs to be updated to support extra_body parameter"
-        )
+        # If we have provider config, use our custom OpenRouterClient
+        if provider_config:
+            base_client = "OpenAIGenericClient" if HAS_OPENAI_GENERIC_CLIENT else "OpenAIClient"
+            logger.info(f"Using custom OpenRouterClient (based on {base_client}) with provider routing support")
+            return OpenRouterClient(config=llm_config, provider=provider_config)
+        
+        # Try OpenAIGenericClient first if available
+        if HAS_OPENAI_GENERIC_CLIENT:
+            logger.info("Using OpenAIGenericClient for OpenRouter compatibility")
+            return OpenAIGenericClient(config=llm_config)
+        else:
+            logger.info("Using standard OpenAIClient for OpenRouter")
+            return OpenAIClient(config=llm_config)
+    
+    # Set base URL for any other custom endpoint
+    if base_url:
+        llm_config.base_url = base_url
+        logger.info(f"Using custom API endpoint: {base_url}")
 
-    # Create and return the client
+    # Create and return the standard client
     return OpenAIClient(config=llm_config)
 
 

@@ -41,8 +41,25 @@ The upstream repository assumes one server per compose file. Here a single compo
 - **Editor auto‑discovery** – ports are written to `.cursor/mcp.json`.
 - **Crash containment** – a bad prompt only restarts its container.
 - **Hot reload** – tweak a project's config and run `graphiti reload <container>`.
+- **OpenRouter support** – Advanced provider routing with special Cerebras compatibility.
 
 Leave `mcp-projects.yaml` empty if you only need the root server.
+
+## OpenRouter Configuration
+The server supports OpenRouter as an LLM provider with advanced routing capabilities:
+
+```bash
+# Basic setup
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_API_KEY=sk-or-your-openrouter-key
+export MODEL_NAME=meta-llama/llama-4-maverick
+
+# Provider routing (e.g., use Cerebras exclusively)
+export OPENROUTER_PROVIDER=cerebras
+export OPENROUTER_ALLOW_FALLBACKS=false
+```
+
+The implementation includes special handling for Cerebras which requires "JSON" in prompts when using structured output.
 
 ## Danger zone
 Setting `NEO4J_DESTROY_ENTIRE_GRAPH=true` wipes *all* projects the next time you run `graphiti up`. Use with care.

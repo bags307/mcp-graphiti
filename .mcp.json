@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "graphiti": {
+      "type": "sse",
+      "url": "http://localhost:8001/sse"
+    }
+  }
+}
